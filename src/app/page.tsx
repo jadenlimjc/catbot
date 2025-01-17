@@ -20,7 +20,7 @@ export default function Home() {
     <main className="fixed h-full w-full bg-muted">
       <div className = "container h-full w-full flex flex-col py-8">
         <div className = "flex-1 overflow-y-auto">
-          {messages.map((message, index)=> (
+          {messages.map((message)=> (
             <Message key={message.id} message={message} />
           ))}
         </div>
