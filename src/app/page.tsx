@@ -1,5 +1,4 @@
 "use client"
-import Image from "next/image";
 import Message from "./components/Messages";
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button";
