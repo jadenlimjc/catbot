@@ -2,7 +2,7 @@ import { openai } from "@/app/openai";
 
 let sharedThreadId: string | null = null;
 
-export const initializeThread = async () => {
+export const initialiseThread = async () => {
   if (!sharedThreadId) {
     const thread = await openai.beta.threads.create();
     sharedThreadId = thread.id;

@@ -18,28 +18,44 @@ export default function Message({ message }: { message: MessageType }) {
         </div>
         {/* Render Markdown content */}
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            // Custom renderer for images
-            img: ({ src, alt }) => (
-              <div className="relative w-full max-w-md mx-auto rounded-lg overflow-hidden shadow-md">
-                <Image
-                  src={src || ""}
-                  alt={alt || "Image"}
-                  layout="responsive"
-                  width={300}
-                  height={300}
-                  objectFit="cover"
-                  className="rounded-lg shadow-md"
-                />
-              </div>
-            ),
-            // Custom renderer for paragraphs
-            p: ({ children }) => <p className="text-lg text-gray-700">{children}</p>,
-          }}
-        >
-          {content}
-        </ReactMarkdown>
+  remarkPlugins={[remarkGfm]}
+  components={{
+    // Custom renderer for images
+    img: ({ src, alt }) => (
+      <div className="relative w-full max-w-md mx-auto rounded-lg overflow-hidden shadow-md">
+        <Image
+          src={src || ""}
+          alt={alt || "Image"}
+          layout="responsive"
+          width={300}
+          height={300}
+          objectFit="cover"
+          className="rounded-lg shadow-md"
+        />
+      </div>
+    ),
+    // Custom renderer for paragraphs
+    p: ({ children }) => {
+      // Check if the children contain an image
+      const hasImage = React.Children.toArray(children).some(
+        (child) =>
+          React.isValidElement(child) &&
+          child.type === "img" // Checks if the child is an <img> element
+      );
+
+      // If an image is present, render children without wrapping in <p>
+      if (hasImage) {
+        return <>{children}</>;
+      }
+
+      // Otherwise, wrap content in <p>
+      return <p className="text-lg text-gray-700">{children}</p>;
+    },
+  }}
+>
+  {content}
+</ReactMarkdown>
+
       </div>
     );
   }
