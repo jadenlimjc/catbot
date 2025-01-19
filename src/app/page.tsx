@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dialog"
 import { PawPrint } from "lucide-react";
 import { CircleHelp } from 'lucide-react';
-import { useChat } from "ai/react";
 import { useEffect, useRef, useState } from "react";
 
 

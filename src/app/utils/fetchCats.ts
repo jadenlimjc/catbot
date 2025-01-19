@@ -37,7 +37,6 @@ export async function fetchCats(breed: string | null, count: number): Promise<st
         console.log("Raw API response data:", data); // Log the raw response from the API
 
         const urls = data.map((item: any) => item.url);
-        console.log("Extracted cat image URLs:", urls); // Log the extracted URLs
 
         return urls;
     } catch (error) {
