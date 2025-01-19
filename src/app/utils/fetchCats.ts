@@ -14,9 +14,9 @@ export async function fetchCats(breed: string | null, count: number): Promise<st
     }
 
     const url = breedId
-      ? `https://api.thecatapi.com/v1/images/search?breed_ids=${breedId}&limit=${count}`
-      : `https://api.thecatapi.com/v1/images/search?limit=${count}`;
-    
+        ? `https://api.thecatapi.com/v1/images/search?breed_ids=${breedId}&limit=${count}`
+        : `https://api.thecatapi.com/v1/images/search?limit=${count}`;
+
     console.log("API URL constructed:", url); // Log the constructed URL
 
     try {
