@@ -1,67 +1,101 @@
-import { streamText } from "ai";
-import { openai } from "@ai-sdk/openai";
-
-const CAT_API_KEY = process.env.CAT_API_KEY || "";
-
-if (!CAT_API_KEY) {
-    throw new Error("Your API key is missing. Please set the CAT_API_KEY environment variable.")
-}
-
-async function fetchCats(breed: string | null, count: number) {
-
-    const breedQuery = breed ? `&breed_ids=${breed}` : "";
-    const response = await fetch(
-        `https://api.thecatapi.com/v1/images/search?limit=${count}${breedQuery}`,
-        {
-            headers: {
-                "x-api-key": CAT_API_KEY,
-            },
-        }
-    );
-
-    if (!response.ok) {
-        throw new Error("Failed to fetch cat images");
-    }
-
-    const cats: {url: string}[] = await response.json();
-    return cats.map((cat: any) => cat.url);
-}
+import { openai } from "@/app/openai";
+import {fetchCats} from "@/app/utils/fetchCats";
 
 
 
-export async function POST(req: Request) {
-    try {
-        const { messages } = await req.json();
+export const fetchCatsFunction = {
+    name: "fetch_cats",
+    description: "Fetch cat images based on breed and count",
+    parameters: {
+      type: "object",
+      properties: {
+        breed: { type: "string", description: "The breed of the cat" },
+        count: { type: "integer", description: "Number of cat images to fetch" },
+      },
+      required: ["breed", "count"],
+    },
+  };
 
-        const userMessage = messages[messages.length - 1].content.toLowerCase();
-        const breedMatch = userMessage.match(/breed: ([a-z0-9-]+)/i);
-        const countMatch = userMessage.match(/count: (\d+)/i);
+  
+  export const handleOpenAIChat = async (input: string, functionHandler: any) => {
+    console.log("Input to OpenAI:", input);
 
-        const breed = breedMatch ? breedMatch[1] : null;
-        const count = countMatch ? Math.min(Number(countMatch[1]), 10) : 1;
-
-        const catImages = await fetchCats(breed, count);
-
-
-
-        const result = await streamText({
-            model: openai("gpt-4o-mini"),
-            temperature: 0.5,
-            system: "You are Polo, the cat of the developer. You occasionally reply with cat noises between your words. You motivate employees to work by being a cute cat.",
-            messages: [
-                ...messages,
-                {
-                    role: "system",
-                    content: `Here ${count > 1 ? "are some cats" : "is a cat"}:\n${catImages
-                        .map((url) => `<img src="${url}" alt="A cute cat" style="max-width: 100%; height: auto;">`)
-                        .join("\n")}`,
-                }
-            ]
-        })
-        return result.toDataStreamResponse();
-    } catch (error) {
-        console.error("Error fetching cats:", error);
-        return new Response(JSON.stringify({ error: "Failed to fetch cats"}), {status:500})
-    }
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: "user", content: input }],
+      functions: [fetchCatsFunction],
+      function_call: "auto",
+    });
     
+  
+    const message = response.choices[0].message;
+  
+    if (message?.function_call) {
+      const { name, arguments: args } = message.function_call;
+      if (name === "fetch_cats") {
+        try {
+            const { breed, count } = JSON.parse(args || "{}");
+            console.log("Parsed function arguments:", { breed, count });
+
+            const cats = await functionHandler(breed, count);
+            console.log("Fetched cat data:", cats);
+
+            return { message, cats };
+        } catch (parseError) {
+            console.error("Error parsing function arguments:", parseError);
+        }
+    }
+    }
+  
+    return { message };
+  };
+  export async function POST(req: Request) {
+    try {
+        console.log("Incoming POST request...");
+
+        const { messages } = await req.json();
+        console.log("Received messages:", messages);
+
+        // Extract the user's last message content for processing
+        const userInput = messages[messages.length - 1]?.content;
+        console.log("User input extracted:", userInput);
+
+        // Use the `handleOpenAIChat` function to process the OpenAI interaction
+        const result = await handleOpenAIChat(userInput, fetchCats);
+        console.log("Result from handleOpenAIChat:", result);
+
+        const catImagesHTML = result.cats
+        ? result.cats
+            .map((url: string) => `<img src="${url}" alt="A cute cat" style="max-width: 100%; height: auto;">`)
+            .join("")
+        : "";
+
+        const assistantMessageContent = result.message?.content
+      ? `${result.message.content}<br>${catImagesHTML}`
+      : `Meow! Here to help.<br>${catImagesHTML}`;
+
+        const responseMessages = [
+            ...messages,
+            {
+                role: "assistant",
+                content: assistantMessageContent || "Meow! Here to help.",
+            },
+        ];
+
+        console.log("Response messages:", JSON.stringify({messages: responseMessages}));
+
+
+        return new Response(
+            JSON.stringify({
+                messages: responseMessages,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+    } catch (error) {
+        console.error("Error handling OpenAI chat:", error);
+        return new Response(
+            JSON.stringify({ error: "Failed to process request" }),
+            { status: 500 }
+        );
+    }
 }
