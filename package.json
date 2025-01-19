@@ -17,10 +17,13 @@
     "clsx": "^2.1.1",
     "dotenv": "^16.4.7",
     "lucide-react": "^0.471.1",
+    "marked": "^15.0.6",
     "next": "15.1.4",
     "openai": "^4.79.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^9.0.3",
+    "remark-gfm": "^4.0.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7"
   },

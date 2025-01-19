@@ -1,144 +1,168 @@
+import { assistantId } from "@/app/assistant-config";
 import { openai } from "@/app/openai";
-import {fetchCats} from "@/app/utils/fetchCats";
-
+import { fetchCats } from "@/app/utils/fetchCats";
+import { initializeThread } from "../threads/route";
 
 
 export const fetchCatsFunction = {
-    name: "fetch_cats",
-    description: "Fetch cat images based on breed and count.",
-    parameters: {
-      type: "object",
-      properties: {
-        breed: { type: "string", description: "The breed of the cat" },
-        count: { type: "integer", description: "Number of cat images to fetch" },
-      },
-      required: ["breed", "count"],
+  name: "fetch_cats",
+  description: "Fetch cat images based on breed and count.",
+  parameters: {
+    type: "object",
+    properties: {
+      breed: { type: "string", description: "The breed of the cat" },
+      count: { type: "integer", description: "Number of cat images to fetch" },
     },
-  };
+    required: ["breed", "count"],
+  },
+};
 
-  
-  export const handleOpenAIChat = async (input: string, functionHandler: any) => {
-    console.log("Input to OpenAI:", input);
+const handleRequiresAction = async (
+  run: any,
+  threadId: string,
+  functionHandler: any
+): Promise<any> => {
+  if (
+    run.required_action &&
+    run.required_action.submit_tool_outputs &&
+    run.required_action.submit_tool_outputs.tool_calls
+  ) {
+    const toolCalls = run.required_action.submit_tool_outputs.tool_calls;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{
-        "role": "developer",
-        "content": [
-          {
-            "type": "text",
-            "text": `
-            You are Polo, the cat of the developer. 
-            You occasionally reply with cat noises between your words, like nyaa and meow. 
-            You motivate employees to work by being a cute cat.
-            `
-          }
-        ]
-      },
-      { 
-        "role": "user", 
-        "content": input 
-      }],
-      functions: [fetchCatsFunction],
-      function_call: "auto",
-    });
-    
-  
-    const message = response.choices[0].message;
-    // console.log("Full message object:", message);
-    // console.log("Tool calls:", message.tool_calls);
-    // console.log("Function calls:", message.function_call);
-    
-    // if(message.tool_calls) {
-    //   for (const toolCall of message.tool_calls) {
-    //     const name = toolCall.function.name;
-    //     const args = JSON.parse(toolCall.function.arguments);
+    console.log("Tool calls received:", toolCalls);
 
-    //     if (name === "fetch_cats") {
-    //       try {
-    //           const { breed, count } = JSON.parse(args || "{}");
-    //           console.log("Parsed function arguments:", { breed, count });
-  
-    //           const cats = await functionHandler(breed, count);
-    //           console.log("Fetched cat data:", cats);
-  
-    //           return { message, cats };
-    //       } catch (parseError) {
-    //           console.error("Error parsing function arguments:", parseError);
-    //       }
-    //   }
-    // }
+    const toolOutputs = await Promise.all(
+      toolCalls.map(async (tool: any) => {
+        console.log("Processing tool:", tool.function.name);
 
-    // }
+        if (tool.function.name === "get_cats") {
+          try {
+            const args = JSON.parse(tool.function.arguments || "{}");
+            console.log("Parsed arguments for get_cats:", args);
 
-    
-  
-    if (message?.function_call) {
-      const { name, arguments: args } = message.function_call;
-      if (name === "fetch_cats") {
-        try {
-            const { breed, count } = JSON.parse(args || "{}");
-            console.log("Parsed function arguments:", { breed, count });
+            const { breed, count } = args;
 
+            // Call the function handler (fetchCats)
             const cats = await functionHandler(breed, count);
-            console.log("Fetched cat data:", cats);
 
-            return { message, cats };
-        } catch (parseError) {
-            console.error("Error parsing function arguments:", parseError);
+            if (cats && cats.length > 0) {
+              console.log("Fetched cat data:", cats);
+              return {
+                tool_call_id: tool.id,
+                output: JSON.stringify(cats), // Return the fetched data
+              };
+            } else {
+              console.warn("fetchCats returned no data.");
+            }
+          } catch (error) {
+            console.error("Error handling get_cats function:", error);
+          }
+        } else {
+          console.warn(`Unhandled tool function: ${tool.function.name}`);
         }
+      })
+    );
+
+    // Filter out undefined tool outputs
+    const validToolOutputs = toolOutputs.filter(Boolean);
+
+    if (validToolOutputs.length > 0) {
+      run = await openai.beta.threads.runs.submitToolOutputsAndPoll(
+        threadId,
+        run.id,
+        { tool_outputs: validToolOutputs }
+      );
+      console.log("Tool outputs submitted successfully.");
+    } else {
+      console.warn("No valid tool outputs to submit. Exiting the loop to prevent infinite recursion.");
+      return run; // Exit to avoid infinite recursion
     }
+
+    return handleRunStatus(run, threadId, functionHandler);
+  } else {
+    console.warn("No required actions found.");
+    return run; // Exit if no required actions
+  }
+};
+
+const handleRunStatus = async (run: any, threadId: string, functionHandler: any) => {
+  if (run.status === "completed") {
+    const messages = await openai.beta.threads.messages.list(threadId);
+    return messages.data;
+  } else if (run.status === "requires_action") {
+    console.log("Run requires action");
+    return await handleRequiresAction(run, threadId, functionHandler);
+  } else {
+    console.error("run did not complete:", run);
+    throw new Error("run did not complete succesfully.")
+  }
+}
+
+
+
+export const handleOpenAIChat = async (input: string, functionHandler: any) => {
+  console.log("Input to OpenAI:", input);
+
+  const threadId = await initializeThread();
+
+  await openai.beta.threads.messages.create(
+    threadId,
+    {
+      role: "user",
+      content: input,
     }
-  
-    return { message };
-  };
-  export async function POST(req: Request) {
-    try {
-        console.log("Incoming POST request...");
-
-        const { messages } = await req.json();
-        console.log("Received messages:", messages);
-
-        // Extract the user's last message content for processing
-        const userInput = messages[messages.length - 1]?.content;
-        console.log("User input extracted:", userInput);
-
-        // Use the `handleOpenAIChat` function to process the OpenAI interaction
-        const result = await handleOpenAIChat(userInput, fetchCats);
-        console.log("Result from handleOpenAIChat:", result);
-
-        const catImagesHTML = result.cats
-        ? result.cats
-            .map((url: string) => `<img src="${url}" alt="A cute cat" style="max-width: 100%; height: auto;">`)
-            .join("")
-        : "";
-
-        const assistantMessageContent = result.message?.content
-      ? `${result.message.content}<br>${catImagesHTML}`
-      : `Meow! Here to help.<br>${catImagesHTML}`;
-
-        const responseMessages = [
-            ...messages,
-            {
-                role: "assistant",
-                content: assistantMessageContent,
-            },
-        ];
-
-        console.log("Response messages:", JSON.stringify({messages: responseMessages}));
+  );
 
 
-        return new Response(
-            JSON.stringify({
-                messages: responseMessages,
-            }),
-            { status: 200, headers: { "Content-Type": "application/json" } }
-        );
-    } catch (error) {
-        console.error("Error handling OpenAI chat:", error);
-        return new Response(
-            JSON.stringify({ error: "Failed to process request" }),
-            { status: 500 }
-        );
+  let run = await openai.beta.threads.runs.createAndPoll(
+    threadId,
+    {
+      assistant_id: assistantId,
     }
+  );
+  return await handleRunStatus(run, threadId, functionHandler);
+};
+
+
+export async function POST(req: Request) {
+  try {
+    const { messages } = await req.json();
+    console.log("Received messages:", messages);
+
+    // Extract the user's last message content
+    const userInput = messages[messages.length - 1]?.content;
+    console.log("User input extracted:", userInput);
+
+    // Process user input using the `handleOpenAIChat` function
+    const result = await handleOpenAIChat(userInput, fetchCats);
+    console.log("Result from handleOpenAIChat:", result);
+
+    // Find the assistant's message
+    const assistantMessage = result.find((msg: any) => msg.role === "assistant");
+    const assistantContent = Array.isArray(assistantMessage?.content)
+      ? assistantMessage.content.map((item: any) => (item.type === "text" ? item.text.value : "")).join("\n")
+      : "Meow! Here to help.";
+
+    console.log("Assistant content:", assistantContent);
+
+    const responseMessages = [
+      ...messages,
+      {
+        role: "assistant",
+        content: assistantContent, // Return raw Markdown/text
+      },
+    ];
+
+    console.log("Response messages:", JSON.stringify({ messages: responseMessages }));
+    return new Response(
+      JSON.stringify({ messages: responseMessages }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("Error handling OpenAI chat:", error);
+    return new Response(
+      JSON.stringify({ error: "Failed to process request" }),
+      { status: 500 }
+    );
+  }
 }
