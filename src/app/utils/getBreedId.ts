@@ -16,7 +16,9 @@ export async function getBreedId(breedName: string): Promise<string | null> {
 
         const breeds = await response.json();
 
-        const breed = breeds.find((b: any) => b.name.toLowerCase() === breedName.toLowerCase());
+        const breed = breeds.find((b: any) =>
+        b.name.replace(/\s+/g, "").toLowerCase() === breedName.trim().toLowerCase()
+        );
         return breed ? breed.id : null;
     } catch (error) {
         console.error("Error fetching breed list:", error);
