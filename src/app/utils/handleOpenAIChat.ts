@@ -1,6 +1,19 @@
 import { assistantId } from "@/app/assistant-config";
 import { openai } from "@/app/openai";
-import { initialiseThread } from "./initialiseThread";
+
+let sharedThreadId: string | null = null;
+
+/**
+ * Ensures a thread is created only once and reused for all interactions.
+ */
+const initialiseThread = async () => {
+  if (!sharedThreadId) {
+    const thread = await openai.beta.threads.create();
+    sharedThreadId = thread.id;
+    console.log("Thread created with ID:", sharedThreadId);
+  }
+  return sharedThreadId;
+};
 
 /**
  * Handles actions required by the OpenAI thread, such as processing tool calls.
@@ -88,6 +101,8 @@ const handleRunStatus = async (
     throw new Error("run did not complete successfully.");
   }
 };
+
+
 
 /**
  * Handles the OpenAI chat flow, including initializing a thread, sending a user message,

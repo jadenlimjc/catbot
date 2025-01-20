@@ -11,8 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { PawPrint } from "lucide-react";
-import { CircleHelp } from 'lucide-react';
+import { PawPrint, CircleHelp, Loader } from "lucide-react";
 import { useRef, useState } from "react";
 
 /**
@@ -24,6 +23,7 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false); // Tracks processing state
   const [input, setInput] = useState(""); // Tracks user input
   const formRef = useRef<HTMLFormElement>(null);
+  
 
   /**
    * Updates the input state when the user types in the textarea.
@@ -110,7 +110,13 @@ export default function Home() {
           {messages.map((message, index) => (
             <Message key={message.id || index} message={message} />
           ))}
+          {isProcessing && (
+            <div className="my-4 flex items-center justify-center">
+              <Loader className="animate-spin" />
+            </div>
+          )}
         </div>
+
         <form ref={formRef} onSubmit={handleSubmit} className="mt-auto relative">
           <div className="w-full max-w-4xl">
             <Textarea
